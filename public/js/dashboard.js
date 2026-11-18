@@ -1,38 +1,76 @@
 (() => {
   'use strict';
 
-  const API_BASE = window.location.origin;
   const REFRESH_INTERVAL = 5000;
+  const SECURITY_LABELS = {
+    rate_limit_block: 'Rate limit superato',
+    security_block: 'Sorgente bloccata',
+    blocked_request: 'Richiesta bloccata',
+    suspicious: 'Tentativo sospetto',
+    anomaly: 'Anomalia',
+    path_traversal: 'Path traversal',
+    xss: 'XSS',
+    sql_injection: 'SQL injection',
+    control_chars: 'Caratteri di controllo',
+    critical: 'Critico'
+  };
 
   const el = {
     indicator: document.getElementById('indicator'),
     indicatorText: document.getElementById('indicator-text'),
+    sseState: document.getElementById('sse-state'),
+    sseStateText: document.getElementById('sse-state-text'),
     statusValue: document.getElementById('status-value'),
     serverName: document.getElementById('server-name'),
     uptimeValue: document.getElementById('uptime-value'),
-    dateValue: document.getElementById('date-value'),
+    requestsValue: document.getElementById('requests-value'),
+    requestsByStatus: document.getElementById('requests-by-status'),
+    sseValue: document.getElementById('sse-value'),
+    cpuValue: document.getElementById('cpu-value'),
+    cpuBar: document.getElementById('cpu-bar'),
+    loadAvg: document.getElementById('load-avg'),
+    ramValue: document.getElementById('ram-value'),
+    ramBar: document.getElementById('ram-bar'),
+    ramDetail: document.getElementById('ram-detail'),
+    rssValue: document.getElementById('rss-value'),
+    heapBar: document.getElementById('heap-bar'),
+    heapDetail: document.getElementById('heap-detail'),
+    procCpu: document.getElementById('proc-cpu'),
     timeValue: document.getElementById('time-value'),
-    apiTimeLabel: document.getElementById('api-time-label'),
+    dateValue: document.getElementById('date-value'),
+    apiStatsBody: document.getElementById('api-stats-body'),
     log: document.getElementById('log'),
     refreshBtn: document.getElementById('refresh-btn'),
-    portLabel: document.getElementById('port-label')
+    portLabel: document.getElementById('port-label'),
+    protections: document.getElementById('protections'),
+    secBlockedRequests: document.getElementById('sec-blocked-requests'),
+    secSuspicious: document.getElementById('sec-suspicious'),
+    secBlocks: document.getElementById('sec-blocks'),
+    secActive: document.getElementById('sec-active'),
+    blockedSources: document.getElementById('blocked-sources'),
+    securityEvents: document.getElementById('security-events'),
+    securityAlerts: document.getElementById('security-alerts')
   };
 
   el.portLabel.textContent = window.location.port || '3000';
 
-  const pad = (n) => String(n).padStart(2, '0');
+  let lastSeq = 0;
+  let eventSource = null;
+  let fallbackTimer = null;
+
   const nowClock = () => new Date().toLocaleTimeString('it-IT');
 
-  function addLog(message, type) {
+  function addLog(message, type, list) {
+    const target = list || el.log;
     const li = document.createElement('li');
     li.className = type === 'err' ? 'err' : 'ok';
     const time = document.createElement('span');
     time.textContent = `[${nowClock()}] `;
     li.appendChild(time);
     li.appendChild(document.createTextNode(message));
-    el.log.prepend(li);
-    while (el.log.children.length > 30) {
-      el.log.removeChild(el.log.lastChild);
+    target.prepend(li);
+    while (target.children.length > 30) {
+      target.removeChild(target.lastChild);
     }
   }
 
@@ -45,58 +83,255 @@
     el.statusValue.classList.toggle('offline', !isOnline);
   }
 
-  async function fetchJson(endpoint) {
-    const res = await fetch(`${API_BASE}${endpoint}`, { cache: 'no-store' });
-    if (!res.ok) {
-      throw new Error(`${endpoint} -> HTTP ${res.status}`);
+  function setSseState(connected) {
+    el.sseState.classList.toggle('connected', connected);
+    el.sseStateText.textContent = connected ? 'CONNESSO' : 'DISCONNESSO';
+  }
+
+  function fmtBytes(bytes) {
+    if (!Number.isFinite(bytes)) return '--';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = bytes;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+      value /= 1024;
+      unit += 1;
     }
+    return `${value.toFixed(value >= 100 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+  }
+
+  function setMeter(bar, percent) {
+    bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  }
+
+  function applyMetrics(m) {
+    setOnline(true);
+    el.serverName.textContent = m.server;
+    el.uptimeValue.textContent = m.uptime.human;
+    el.requestsValue.textContent = m.requests.total.toLocaleString('it-IT');
+    const statusParts = Object.entries(m.requests.byStatus)
+      .map(([code, count]) => `${code}: ${count}`)
+      .join(' · ');
+    el.requestsByStatus.textContent = statusParts || 'Totale ricevute dal server';
+    el.sseValue.textContent = m.sseClients;
+
+    el.cpuValue.textContent = `${m.system.cpuPercent.toFixed(1)}%`;
+    setMeter(el.cpuBar, m.system.cpuPercent);
+    el.loadAvg.textContent = m.system.loadAvg.join(' / ');
+
+    el.ramValue.textContent = `${m.system.ramPercent.toFixed(1)}%`;
+    setMeter(el.ramBar, m.system.ramPercent);
+    el.ramDetail.textContent = `${fmtBytes(m.system.ramUsedBytes)} / ${fmtBytes(m.system.ramTotalBytes)}`;
+
+    el.rssValue.textContent = fmtBytes(m.process.rssBytes);
+    setMeter(el.heapBar, m.process.heapPercent);
+    el.heapDetail.textContent = `${fmtBytes(m.process.heapUsedBytes)} / ${fmtBytes(m.process.heapTotalBytes)}`;
+    el.procCpu.textContent = `${m.process.cpuPercent.toFixed(1)}%`;
+
+    if (Array.isArray(m.api) && m.api.length > 0) {
+      el.apiStatsBody.innerHTML = '';
+      m.api.forEach((row) => {
+        const tr = document.createElement('tr');
+        const cells = [
+          row.endpoint,
+          row.calls.toLocaleString('it-IT'),
+          `${row.avgMs} ms`,
+          String(row.errors)
+        ];
+        cells.forEach((text, i) => {
+          const td = document.createElement('td');
+          td.textContent = text;
+          if (i === 0) {
+            td.className = 'mono';
+          } else if (i === 3 && row.errors > 0) {
+            td.className = 'err-text';
+          }
+          tr.appendChild(td);
+        });
+        el.apiStatsBody.appendChild(tr);
+      });
+    }
+  }
+
+  function applySecurity(s) {
+    el.protections.innerHTML = '';
+    const labels = {
+      helmet: 'Helmet',
+      rateLimit: 'Rate limiting',
+      inputValidation: 'Validazione input',
+      anomalyDetection: 'Anomaly detection',
+      ipBlocking: 'Blocco IP',
+      adminToken: 'API admin'
+    };
+    Object.entries(s.protections).forEach(([key, active]) => {
+      const badge = document.createElement('span');
+      badge.className = `badge ${active ? 'badge-on' : 'badge-off'}`;
+      badge.textContent = labels[key] || key;
+      el.protections.appendChild(badge);
+    });
+
+    el.secBlockedRequests.textContent = s.counters.blockedRequests.toLocaleString('it-IT');
+    el.secSuspicious.textContent = s.counters.suspiciousAttempts.toLocaleString('it-IT');
+    el.secBlocks.textContent = s.counters.blocksIssued.toLocaleString('it-IT');
+    el.secActive.textContent = s.counters.activeBlocks.toLocaleString('it-IT');
+
+    el.blockedSources.innerHTML = '';
+    if (s.blockedSources.length === 0) {
+      addLog('Nessuna sorgente bloccata', 'ok', el.blockedSources);
+    } else {
+      s.blockedSources.forEach((src) => {
+        addLog(`${src.source} · fino alle ${new Date(src.until).toLocaleTimeString('it-IT')} · ${src.reason}`, 'err', el.blockedSources);
+      });
+    }
+
+    el.securityEvents.innerHTML = '';
+    if (s.events.length === 0) {
+      addLog('Nessun evento di sicurezza', 'ok', el.securityEvents);
+    } else {
+      s.events.forEach((ev) => {
+        const label = SECURITY_LABELS[ev.type] || ev.type;
+        addLog(`${label} · ${ev.source} · ${ev.detail}`, 'err', el.securityEvents);
+      });
+    }
+  }
+
+  function pushAlert(text) {
+    addLog(text, 'err', el.securityAlerts);
+  }
+
+  function handleEvent(event) {
+    if (!event || typeof event.seq !== 'number') return;
+    if (event.seq <= lastSeq) return;
+    lastSeq = event.seq;
+
+    switch (event.type) {
+      case 'snapshot':
+        applyMetrics(event.data.metrics);
+        applySecurity(event.data.security);
+        setSseState(true);
+        addLog('Snapshot iniziale ricevuto via SSE');
+        break;
+      case 'metrics':
+        applyMetrics(event.data);
+        break;
+      case 'security':
+        pushAlert(`[${new Date(event.ts).toLocaleTimeString('it-IT')}] ${event.data.type} · ${event.data.source} · ${event.data.detail}`);
+        refreshSecurity();
+        break;
+      case 'sse_connect':
+      case 'sse_disconnect':
+        el.sseValue.textContent = event.data.sseClients;
+        break;
+      default:
+        break;
+    }
+  }
+
+  function connectEvents() {
+    if (typeof EventSource === 'undefined') {
+      startFallbackPolling();
+      return;
+    }
+
+    eventSource = new EventSource('/api/events');
+
+    eventSource.onopen = () => {
+      setSseState(true);
+      el.sseValue.textContent = '--';
+      addLog('Connessione SSE stabilita con /api/events');
+    };
+
+    eventSource.onmessage = (msg) => {
+      try {
+        handleEvent(JSON.parse(msg.data));
+      } catch (err) {
+        addLog(`Evento SSE non valido: ${err.message}`, 'err');
+      }
+    };
+
+    ['snapshot', 'metrics', 'security', 'sse_connect', 'sse_disconnect'].forEach((type) => {
+      eventSource.addEventListener(type, (msg) => {
+        try {
+          handleEvent(JSON.parse(msg.data));
+        } catch (err) {
+          addLog(`Evento SSE non valido: ${err.message}`, 'err');
+        }
+      });
+    });
+
+    eventSource.onerror = () => {
+      setSseState(false);
+      setOnline(false);
+      addLog('Connessione SSE interrotta — riconnessione automatica…', 'err');
+    };
+  }
+
+  function startFallbackPolling() {
+    if (fallbackTimer) return;
+    addLog('EventSource non supportato: attivo polling di fallback ogni 5s', 'err');
+    fallbackTimer = setInterval(async () => {
+      await refreshAll(false);
+    }, REFRESH_INTERVAL);
+  }
+
+  async function fetchJson(endpoint) {
+    const res = await fetch(endpoint, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`${endpoint} -> HTTP ${res.status}`);
     return res.json();
   }
 
-  async function updateStatus() {
+  async function refreshSecurity() {
     try {
-      const data = await fetchJson('/api/status');
-      if (!data.success) throw new Error('Risposta API non valida');
-
-      setOnline(true);
-      el.serverName.textContent = data.server;
-      el.uptimeValue.textContent = data.uptime.human;
-      addLog(`Stato sincronizzato · uptime ${data.uptime.human}`);
+      const data = await fetchJson('/api/security');
+      if (data.success) applySecurity(data);
     } catch (err) {
-      setOnline(false);
-      el.serverName.textContent = 'non raggiungibile';
-      addLog(`Errore /api/status: ${err.message}`, 'err');
+      addLog(`Errore /api/security: ${err.message}`, 'err');
     }
   }
 
   async function updateTime() {
     try {
       const data = await fetchJson('/api/time');
-      if (!data.success) throw new Error('Risposta API non valida');
-
-      el.dateValue.textContent = data.date;
+      if (!data.success) throw new Error('Risposta non valida');
       el.timeValue.textContent = data.time;
-      el.apiTimeLabel.textContent = `API · ${new Date(data.unix).toLocaleString('it-IT')}`;
+      el.dateValue.textContent = `${data.date} · /api/time`;
     } catch (err) {
       addLog(`Errore /api/time: ${err.message}`, 'err');
     }
   }
 
-  async function refresh() {
-    await Promise.all([updateStatus(), updateTime()]);
+  async function refreshAll(verbose) {
+    try {
+      const [metricsData, securityData] = await Promise.all([
+        fetchJson('/api/metrics'),
+        fetchJson('/api/security')
+      ]);
+      if (metricsData.success) applyMetrics(metricsData);
+      if (securityData.success) applySecurity(securityData);
+      if (verbose) addLog('Test manuale API completato: /api/metrics + /api/security');
+    } catch (err) {
+      setOnline(false);
+      addLog(`Errore aggiornamento: ${err.message}`, 'err');
+    }
   }
 
   el.refreshBtn.addEventListener('click', () => {
     addLog('Test manuale API avviato...');
-    refresh();
+    refreshAll(true);
   });
 
-  window.addEventListener('online', refresh);
   window.addEventListener('offline', () => {
     setOnline(false);
     addLog('Connessione di rete persa', 'err');
   });
 
-  refresh();
-  setInterval(refresh, REFRESH_INTERVAL);
+  window.addEventListener('online', () => {
+    addLog('Connessione di rete ripristinata');
+    refreshAll(false);
+  });
+
+  updateTime();
+  refreshAll(false);
+  setInterval(updateTime, REFRESH_INTERVAL);
+  connectEvents();
 })();

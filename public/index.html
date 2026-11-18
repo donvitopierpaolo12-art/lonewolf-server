@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="LONEWOLF SERVER - Pannello di controllo tecnologico" />
+  <meta name="description" content="LONEWOLF SERVER - Centro di controllo tecnologico" />
   <title>LONEWOLF SERVER</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
@@ -15,9 +15,14 @@
       <span class="brand-mark" aria-hidden="true"></span>
       <h1>LONEWOLF<span class="brand-accent">SERVER</span></h1>
     </div>
-    <div id="indicator" class="indicator offline" role="status" aria-live="polite">
-      <span class="dot" aria-hidden="true"></span>
-      <span id="indicator-text">OFFLINE</span>
+    <div class="topbar-right">
+      <div id="sse-state" class="sse-state" title="Connessione SSE con il backend">
+        SSE <span id="sse-state-text">DISCONNESSO</span>
+      </div>
+      <div id="indicator" class="indicator offline" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="indicator-text">OFFLINE</span>
+      </div>
     </div>
   </header>
 
@@ -36,22 +41,60 @@
       </article>
 
       <article class="card">
-        <h2 class="card-title">DATA</h2>
-        <p id="date-value" class="mid-value">--/--/----</p>
-        <p class="sub-value" id="api-time-label">API &nbsp;·&nbsp; /api/time</p>
+        <h2 class="card-title">RICHIESTE HTTP</h2>
+        <p id="requests-value" class="big-value mono">0</p>
+        <p class="sub-value" id="requests-by-status">Totale ricevute dal server</p>
       </article>
 
       <article class="card">
-        <h2 class="card-title">ORA</h2>
+        <h2 class="card-title">CLIENT SSE</h2>
+        <p id="sse-value" class="big-value mono">0</p>
+        <p class="sub-value">Dashboard connesse via /api/events</p>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2 class="card-title">CPU SISTEMA</h2>
+        <p id="cpu-value" class="big-value mono">--%</p>
+        <div class="meter"><div id="cpu-bar" class="meter-fill"></div></div>
+        <p class="sub-value">Load avg <span id="load-avg">--</span></p>
+      </article>
+
+      <article class="card">
+        <h2 class="card-title">RAM SISTEMA</h2>
+        <p id="ram-value" class="big-value mono">--%</p>
+        <div class="meter"><div id="ram-bar" class="meter-fill ram"></div></div>
+        <p class="sub-value" id="ram-detail">-- / --</p>
+      </article>
+
+      <article class="card">
+        <h2 class="card-title">MEMORIA NODE.JS</h2>
+        <p id="rss-value" class="big-value mono">-- MB</p>
+        <div class="meter"><div id="heap-bar" class="meter-fill heap"></div></div>
+        <p class="sub-value">Heap <span id="heap-detail">--</span> · CPU proc. <span id="proc-cpu">--%</span></p>
+      </article>
+
+      <article class="card">
+        <h2 class="card-title">DATA E ORA</h2>
         <p id="time-value" class="big-value mono">--:--:--</p>
-        <p class="sub-value">Sincronizzato con il backend</p>
+        <p class="sub-value" id="date-value">--/--/----</p>
       </article>
     </section>
 
     <section class="grid grid-secondary">
       <article class="card card-wide">
-        <h2 class="card-title">LOG DI SISTEMA</h2>
-        <ul id="log" class="log" aria-live="polite"></ul>
+        <h2 class="card-title">STATISTICHE API</h2>
+        <div class="table-responsive-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>ENDPOINT</th><th>CHIAMATE</th><th>MEDIA</th><th>ERRORI</th></tr>
+          </thead>
+          <tbody id="api-stats-body">
+            <tr><td colspan="4" class="empty">In attesa di dati dal backend…</td></tr>
+          </tbody>
+        </table>
+        </div>
       </article>
 
       <article class="card">
@@ -59,14 +102,71 @@
         <ul class="endpoints">
           <li><code>GET /api/status</code><span>Stato del server</span></li>
           <li><code>GET /api/time</code><span>Data e ora correnti</span></li>
+          <li><code>GET /api/metrics</code><span>Metriche reali</span></li>
+          <li><code>GET /api/security</code><span>Sicurezza</span></li>
+          <li><code>GET /api/events</code><span>Flusso SSE live</span></li>
         </ul>
         <button id="refresh-btn" class="btn" type="button">TEST MANUALE API</button>
+      </article>
+    </section>
+
+    <section class="card security-center">
+      <div class="sec-head">
+        <h2 class="card-title">CENTRO DI CONTROLLO · SICUREZZA</h2>
+        <div id="protections" class="protections"></div>
+      </div>
+
+      <div class="sec-grid">
+        <div class="sec-stat">
+          <p class="sec-value mono" id="sec-blocked-requests">0</p>
+          <p class="sec-label">Richieste bloccate</p>
+        </div>
+        <div class="sec-stat">
+          <p class="sec-value mono" id="sec-suspicious">0</p>
+          <p class="sec-label">Tentativi sospetti</p>
+        </div>
+        <div class="sec-stat">
+          <p class="sec-value mono" id="sec-blocks">0</p>
+          <p class="sec-label">Blocchi emessi</p>
+        </div>
+        <div class="sec-stat">
+          <p class="sec-value mono" id="sec-active">0</p>
+          <p class="sec-label">Sorgenti bloccate ora</p>
+        </div>
+      </div>
+
+      <div class="sec-cols">
+        <div>
+          <h3 class="card-title">SORGENTI BLOCCATE</h3>
+          <ul id="blocked-sources" class="log">
+            <li class="ok">Nessuna sorgente bloccata</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="card-title">ULTIMI EVENTI RILEVATI</h3>
+          <ul id="security-events" class="log">
+            <li class="ok">Nessun evento di sicurezza</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="card-title">CRONOLOGIA AVVISI</h3>
+          <ul id="security-alerts" class="log">
+            <li class="ok">Nessun avviso</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid grid-secondary">
+      <article class="card card-wide">
+        <h2 class="card-title">LOG DI SISTEMA</h2>
+        <ul id="log" class="log" aria-live="polite"></ul>
       </article>
     </section>
   </main>
 
   <footer class="footer">
-    <p>LONEWOLF SERVER · Node.js + Express · <span id="port-label">3000</span></p>
+    <p>LONEWOLF SERVER · Node.js + Express + SSE · <span id="port-label">3000</span></p>
   </footer>
 
   <script src="js/dashboard.js"></script>
