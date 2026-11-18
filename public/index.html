@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="LONEWOLF SERVER - Pannello di controllo tecnologico" />
+  <title>LONEWOLF SERVER</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="scanlines" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1>LONEWOLF<span class="brand-accent">SERVER</span></h1>
+    </div>
+    <div id="indicator" class="indicator offline" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="indicator-text">OFFLINE</span>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="grid">
+      <article class="card card-status">
+        <h2 class="card-title">STATO SERVER</h2>
+        <p id="status-value" class="big-value">--</p>
+        <p class="sub-value">Backend Express · <span id="server-name">--</span></p>
+      </article>
+
+      <article class="card">
+        <h2 class="card-title">UPTIME</h2>
+        <p id="uptime-value" class="big-value mono">00:00:00</p>
+        <p class="sub-value">Tempo di attività continuativo</p>
+      </article>
+
+      <article class="card">
+        <h2 class="card-title">DATA</h2>
+        <p id="date-value" class="mid-value">--/--/----</p>
+        <p class="sub-value" id="api-time-label">API &nbsp;·&nbsp; /api/time</p>
+      </article>
+
+      <article class="card">
+        <h2 class="card-title">ORA</h2>
+        <p id="time-value" class="big-value mono">--:--:--</p>
+        <p class="sub-value">Sincronizzato con il backend</p>
+      </article>
+    </section>
+
+    <section class="grid grid-secondary">
+      <article class="card card-wide">
+        <h2 class="card-title">LOG DI SISTEMA</h2>
+        <ul id="log" class="log" aria-live="polite"></ul>
+      </article>
+
+      <article class="card">
+        <h2 class="card-title">ENDPOINT API</h2>
+        <ul class="endpoints">
+          <li><code>GET /api/status</code><span>Stato del server</span></li>
+          <li><code>GET /api/time</code><span>Data e ora correnti</span></li>
+        </ul>
+        <button id="refresh-btn" class="btn" type="button">TEST MANUALE API</button>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>LONEWOLF SERVER · Node.js + Express · <span id="port-label">3000</span></p>
+  </footer>
+
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

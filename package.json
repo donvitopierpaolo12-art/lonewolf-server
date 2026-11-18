@@ -1,0 +1,19 @@
+{
+  "name": "lonewolf-server",
+  "version": "1.0.0",
+  "description": "LONEWOLF SERVER - Pannello di controllo web con server Express integrato",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "express",
+    "dashboard",
+    "server"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
