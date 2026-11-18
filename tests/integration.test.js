@@ -91,7 +91,8 @@ async function main() {
   let metricsCount = 0;
 
   const readPromise = (async () => {
-    while (received.length < 4) {
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
       const { value, done } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
@@ -117,11 +118,14 @@ async function main() {
   })();
 
   const warmup = get('/api/status');
-  await Promise.race([readPromise, sleep(12000)]);
+  await readPromise;
   check('SSE snapshot iniziale ricevuto', gotSnapshot);
   check('SSE aggiornamenti metriche periodici', gotMetrics && metricsCount >= 2, `${metricsCount} tick in ~10s`);
 
-  const reqsAtStream = received.length > 0 ? received[received.length - 1].data.requests.total : 0;
+  const lastMetricsEvent = [...received].reverse().find((e) => e.type === 'metrics' || (e.type === 'snapshot' && e.data.metrics));
+  const reqsAtStream = lastMetricsEvent
+    ? (lastMetricsEvent.type === 'metrics' ? lastMetricsEvent.data.requests.total : lastMetricsEvent.data.metrics.requests.total)
+    : 0;
   controller.abort();
   await warmup;
   await sleep(2000);

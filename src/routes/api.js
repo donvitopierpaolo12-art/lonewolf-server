@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const config = require('../config');
+const agents = require('../agents');
 const metrics = require('../metrics/metrics');
 const security = require('../security/security');
 const sse = require('../sse/events');
@@ -47,6 +48,13 @@ router.get('/security', (req, res) => {
 });
 
 router.get('/events', sse.handler);
+
+router.get('/agents', (req, res) => {
+  res.json({
+    success: true,
+    ...agents.snapshot()
+  });
+});
 
 router.post('/security/unblock', (req, res) => {
   if (!config.adminToken) {

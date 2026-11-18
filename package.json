@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node tests/integration.test.js"
+    "test": "node tests/integration.test.js",
+    "test:agents": "node tests/agents.test.js"
   },
   "keywords": [
     "express",

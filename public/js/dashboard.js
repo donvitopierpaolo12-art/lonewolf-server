@@ -49,7 +49,27 @@
     secActive: document.getElementById('sec-active'),
     blockedSources: document.getElementById('blocked-sources'),
     securityEvents: document.getElementById('security-events'),
-    securityAlerts: document.getElementById('security-alerts')
+    securityAlerts: document.getElementById('security-alerts'),
+    coreIndicator: document.getElementById('core-indicator'),
+    coreStatus: document.getElementById('core-status'),
+    coreActivity: document.getElementById('core-activity'),
+    coreLastCheck: document.getElementById('core-lastcheck'),
+    coreLastEvent: document.getElementById('core-lastevent'),
+    coreIterations: document.getElementById('core-iterations'),
+    coreUsage: document.getElementById('core-usage'),
+    coreGuardLevel: document.getElementById('core-guard-level'),
+    coreGuardIntegrity: document.getElementById('core-guard-integrity'),
+    coreFindings: document.getElementById('core-findings'),
+    guardIndicator: document.getElementById('guard-indicator'),
+    guardStatus: document.getElementById('guard-status'),
+    guardLevel: document.getElementById('guard-level'),
+    guardActivity: document.getElementById('guard-activity'),
+    guardLastCheck: document.getElementById('guard-lastcheck'),
+    guardLastEvent: document.getElementById('guard-lastevent'),
+    guardAnalyzed: document.getElementById('guard-analyzed'),
+    guardIntegrity: document.getElementById('guard-integrity'),
+    guardFindings: document.getElementById('guard-findings'),
+    agentComms: document.getElementById('agent-comms')
   };
 
   el.portLabel.textContent = window.location.port || '3000';
@@ -195,6 +215,74 @@
     }
   }
 
+  function setAgentState(indicator, statusEl, online) {
+    indicator.classList.toggle('online', online);
+    indicator.classList.toggle('offline', !online);
+    statusEl.textContent = online ? 'ONLINE' : 'OFFLINE';
+  }
+
+  function applyFindings(list, items, emptyText) {
+    list.innerHTML = '';
+    if (!items || items.length === 0) {
+      addLog(emptyText, 'ok', list);
+      return;
+    }
+    items.forEach((f) => {
+      const time = new Date(f.ts).toLocaleTimeString('it-IT');
+      addLog(`${time} · [${f.level}] ${f.rule} · ${f.detail}`, f.level === 'NORMALE' ? 'ok' : 'err', list);
+    });
+  }
+
+  function applyAgents(data) {
+    if (!data) return;
+
+    const coreEl = data.core;
+    setAgentState(el.coreIndicator, el.coreStatus, coreEl.status === 'ONLINE');
+    el.coreActivity.textContent = coreEl.currentActivity || '--';
+    el.coreLastCheck.textContent = coreEl.lastCheckAt ? new Date(coreEl.lastCheckAt).toLocaleTimeString('it-IT') : '--';
+    el.coreLastEvent.textContent = coreEl.lastEvent
+      ? `${coreEl.lastEvent.busType} ${new Date(coreEl.lastEvent.ts).toLocaleTimeString('it-IT')}`
+      : '--';
+    el.coreIterations.textContent = (coreEl.iterations || 0).toLocaleString('it-IT');
+    if (coreEl.resources) {
+      el.coreUsage.textContent = `${coreEl.resources.cpuPercent}% (soglia ${coreEl.resources.cpuThreshold}%) · heap ${coreEl.resources.heapPercent}%`;
+    }
+    if (coreEl.guardLink) {
+      el.coreGuardLevel.textContent = coreEl.guardLink.threatLevel;
+      el.coreGuardIntegrity.textContent = coreEl.guardLink.integrity;
+    }
+    applyFindings(el.coreFindings, coreEl.findings, 'Nessuna anomalia rilevata');
+
+    const guardEl = data.guard;
+    setAgentState(el.guardIndicator, el.guardStatus, guardEl.status === 'ONLINE');
+    el.guardLevel.textContent = guardEl.threatLevel;
+    el.guardLevel.className = `threat-tag level-${guardEl.threatLevel}`;
+    el.guardActivity.textContent = guardEl.currentActivity || '--';
+    el.guardLastCheck.textContent = guardEl.lastCheckAt ? new Date(guardEl.lastCheckAt).toLocaleTimeString('it-IT') : '--';
+    el.guardLastEvent.textContent = guardEl.lastEvent
+      ? `${guardEl.lastEvent.type} · ${guardEl.lastEvent.source || ''} · ${new Date(guardEl.lastEvent.ts).toLocaleTimeString('it-IT')}`
+      : '--';
+    el.guardAnalyzed.textContent = (guardEl.eventsAnalyzed || 0).toLocaleString('it-IT');
+    el.guardIntegrity.textContent = `${guardEl.integrity || '--'} · ancora: ${data.registryAnchored === false ? 'ANOMALA' : data.registryAnchored === true ? 'ok' : '--'}`;
+
+    const guardItems = [];
+    (guardEl.repeatedSources || []).forEach((rs) => {
+      guardItems.push({ ts: guardEl.lastCheckAt || new Date().toISOString(), level: 'ALLERTA', rule: 'tentativi ripetuti', detail: `${rs.source} · ${rs.count} eventi` });
+    });
+    (guardEl.findings || []).forEach((f) => guardItems.push(f));
+    applyFindings(el.guardFindings, guardItems.length > 0 ? guardItems : [], 'Nessuna regola violata');
+
+    el.agentComms.innerHTML = '';
+    if (!data.comms || data.comms.length === 0) {
+      addLog('Nessuna comunicazione', 'ok', el.agentComms);
+    } else {
+      data.comms.slice(0, 15).forEach((c) => {
+        const time = new Date(c.ts).toLocaleTimeString('it-IT');
+        addLog(`${time} · ${c.from.toUpperCase()} → ${c.to.toUpperCase()} · ${c.type} · ${c.accepted ? 'consegnato' : 'RIFIUTATO'}`, c.accepted ? 'ok' : 'err', el.agentComms);
+      });
+    }
+  }
+
   function pushAlert(text) {
     addLog(text, 'err', el.securityAlerts);
   }
@@ -208,8 +296,12 @@
       case 'snapshot':
         applyMetrics(event.data.metrics);
         applySecurity(event.data.security);
+        if (event.data.agents) applyAgents(event.data.agents);
         setSseState(true);
         addLog('Snapshot iniziale ricevuto via SSE');
+        break;
+      case 'agents':
+        refreshAgents();
         break;
       case 'metrics':
         applyMetrics(event.data);
@@ -280,6 +372,20 @@
     return res.json();
   }
 
+  let lastAgentsRefresh = 0;
+
+  async function refreshAgents() {
+    const now = Date.now();
+    if (now - lastAgentsRefresh < 1500) return;
+    lastAgentsRefresh = now;
+    try {
+      const data = await fetchJson('/api/agents');
+      if (data.success) applyAgents(data);
+    } catch (err) {
+      addLog(`Errore /api/agents: ${err.message}`, 'err');
+    }
+  }
+
   async function refreshSecurity() {
     try {
       const data = await fetchJson('/api/security');
@@ -302,13 +408,15 @@
 
   async function refreshAll(verbose) {
     try {
-      const [metricsData, securityData] = await Promise.all([
+      const [metricsData, securityData, agentsData] = await Promise.all([
         fetchJson('/api/metrics'),
-        fetchJson('/api/security')
+        fetchJson('/api/security'),
+        fetchJson('/api/agents')
       ]);
       if (metricsData.success) applyMetrics(metricsData);
       if (securityData.success) applySecurity(securityData);
-      if (verbose) addLog('Test manuale API completato: /api/metrics + /api/security');
+      if (agentsData.success) applyAgents(agentsData);
+      if (verbose) addLog('Test manuale API completato: /api/metrics + /api/security + /api/agents');
     } catch (err) {
       setOnline(false);
       addLog(`Errore aggiornamento: ${err.message}`, 'err');

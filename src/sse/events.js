@@ -1,12 +1,14 @@
 const eventBus = require('../events/eventBus');
 const metrics = require('../metrics/metrics');
 const security = require('../security/security');
+const agents = require('../agents');
 const sseClients = require('./clients');
 
 function buildSnapshot() {
   return {
     metrics: metrics.current(),
     security: security.snapshot(),
+    agents: agents.snapshot(),
     sseClients: sseClients.count()
   };
 }

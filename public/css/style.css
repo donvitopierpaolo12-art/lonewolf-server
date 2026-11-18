@@ -535,3 +535,74 @@ body {
 .table-responsive-wrap {
   overflow-x: auto;
 }
+
+.agents-center {
+  border-color: rgba(103, 232, 249, 0.25);
+  background: linear-gradient(160deg, rgba(34, 211, 238, 0.05), var(--bg-card) 45%);
+}
+
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 1.1rem;
+}
+
+.agent-card {
+  min-height: 0;
+}
+
+.agent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.agent-name {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+
+.agent-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.8rem;
+  margin: 0.5rem 0 0.8rem;
+}
+
+.agent-kv span {
+  color: var(--text);
+  font-family: var(--mono);
+}
+
+.threat-tag {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.threat-tag.level-NORMALE { color: var(--online); border-color: rgba(52, 211, 153, 0.4); }
+.threat-tag.level-ATTENZIONE { color: #fbbf24; border-color: rgba(251, 191, 36, 0.4); }
+.threat-tag.level-ALLERTA { color: #fb923c; border-color: rgba(251, 146, 60, 0.45); }
+.threat-tag.level-CRITICO { color: var(--offline); border-color: rgba(248, 113, 113, 0.5); }
+
+.agent-card .indicator {
+  font-size: 0.66rem;
+  padding: 0.3rem 0.7rem;
+}
+
+@media (max-width: 960px) {
+  .agents-grid {
+    grid-template-columns: 1fr;
+  }
+}

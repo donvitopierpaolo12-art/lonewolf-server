@@ -2,6 +2,7 @@ const app = require('./src/app');
 const config = require('./src/config');
 const metrics = require('./src/metrics/metrics');
 const security = require('./src/security/security');
+const agents = require('./src/agents');
 
 const server = app.listen(config.port, config.host, () => {
   console.log('========================================');
@@ -15,9 +16,13 @@ const server = app.listen(config.port, config.host, () => {
 
 metrics.start();
 security.startCleanup();
+agents.start();
+agents.startPublisher();
 
 const shutdown = (signal) => {
   console.log(`\n[${signal}] Chiusura del server in corso...`);
+  agents.stop();
+  agents.stopPublisher();
   metrics.stop();
   server.close(() => {
     console.log('Server chiuso correttamente.');

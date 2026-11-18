@@ -68,10 +68,19 @@ function block(ip, reason, now) {
   recordEvent('security_block', ip, `${reason} · blocco temporaneo ${config.security.blockDurationMs / 1000}s`);
 }
 
+function observe(type, ip, detail) {
+  eventBus.publish('security_observation', {
+    type,
+    source: maskIp(ip),
+    detail
+  });
+}
+
 function registerSuspicious(ip, detail) {
   const normalized = normalizeIp(ip);
   const now = Date.now();
   counters.suspiciousAttempts += 1;
+  observe('suspicious', ip, detail);
 
   const entry = suspicious.get(normalized);
   const inWindow = entry && now - entry.windowStart < config.security.windowMs;
@@ -102,6 +111,7 @@ function guard(req, res, next) {
     } else {
       counters.blockedRequests += 1;
       recordEvent('blocked_request', ip, `Richiesta rifiutata · motivo: ${activeBlock.reason}`);
+      observe('blocked_request', ip, activeBlock.reason);
       return res.status(429).json({
         success: false,
         error: 'Too Many Requests',
@@ -121,6 +131,7 @@ function guard(req, res, next) {
   if (anomaly) {
     counters.anomaliesDetected += 1;
     registerSuspicious(ip, `Pattern anomalo rilevato: ${anomaly.name}`);
+    observe('anomaly', ip, `${anomaly.name} su ${req.originalUrl}`);
     return res.status(400).json({
       success: false,
       error: 'Richiesta bloccata: pattern anomalo rilevato'
@@ -137,6 +148,7 @@ function guard(req, res, next) {
         block(ip, `Rate limit: oltre ${config.security.maxRequests} richieste in ${config.security.windowMs / 1000}s`, now);
         counters.blockedRequests += 1;
         recordEvent('blocked_request', ip, 'Richiesta rifiutata: superato il rate limit');
+        observe('rate_limit_block', ip, 'Richiesta rifiutata: superato il rate limit');
         return res.status(429).json({
           success: false,
           error: 'Too Many Requests',
@@ -210,6 +222,28 @@ function unblock(ipInput) {
   return removed;
 }
 
+function requestContainment(source, requestedBy) {
+  const normalized = normalizeIp(source);
+  const now = Date.now();
+
+  const activeBlock = blocked.get(normalized);
+  if (activeBlock && activeBlock.until > now) {
+    recordEvent('containment_reviewed', source, `${requestedBy}: sorgente già contenuta dal sistema di sicurezza`);
+    return { decision: 'sorgente già bloccata', enforced: true };
+  }
+
+  const window = hits.get(normalized);
+  const overLimit = window && window.count > config.security.maxRequests;
+
+  if (overLimit) {
+    block(normalized, `Contenimento richiesto da ${requestedBy}`, now);
+    return { decision: 'blocco applicato secondo le soglie esistenti', enforced: true };
+  }
+
+  recordEvent('containment_refused', source, `${requestedBy}: soglie di sicurezza non raggiunte, nessun blocco`);
+  return { decision: 'richiesta rifiutata: soglie di sicurezza non raggiunte', enforced: false };
+}
+
 function startCleanup() {
   if (cleanupTimer) return;
   cleanupTimer = setInterval(() => {
@@ -233,4 +267,4 @@ function startCleanup() {
   if (cleanupTimer.unref) cleanupTimer.unref();
 }
 
-module.exports = { guard, noteNotFound, noteInvalidPayload, snapshot, unblock, startCleanup };
+module.exports = { guard, noteNotFound, noteInvalidPayload, snapshot, unblock, requestContainment, startCleanup };

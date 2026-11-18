@@ -110,6 +110,56 @@
       </article>
     </section>
 
+    <section class="card agents-center">
+      <div class="sec-head">
+        <h2 class="card-title">AGENTI AUTONOMI · LONEWOLF CORE & GUARD</h2>
+        <span class="badge badge-on" title="Agenti a regole deterministiche, architettura estendibile a modello AI locale">MOTORE A REGOLE DETERMINISTICHE</span>
+      </div>
+
+      <div class="agents-grid">
+        <article class="card agent-card">
+          <div class="agent-head">
+            <h3 class="agent-name">LONEWOLF CORE</h3>
+            <div id="core-indicator" class="indicator offline"><span class="dot"></span><span id="core-status">OFFLINE</span></div>
+          </div>
+          <p class="sub-value" id="core-role">Monitoraggio operativo, metriche e salute API</p>
+          <div class="agent-kv">
+            <p>Attività corrente · <span id="core-activity">--</span></p>
+            <p>Ultimo controllo · <span id="core-lastcheck">--</span></p>
+            <p>Ultimo evento ricevuto · <span id="core-lastevent">--</span></p>
+            <p>Cicli di analisi · <span id="core-iterations">0</span></p>
+            <p>Risorse · CPU <span id="core-usage">--</span></p>
+            <p>Link GUARD · minaccia <span id="core-guard-level">--</span> · integrità <span id="core-guard-integrity">--</span></p>
+          </div>
+          <h4 class="card-title">ANOMALIE E IRREGOLARITÀ</h4>
+          <ul id="core-findings" class="log"><li class="ok">Nessuna anomalia rilevata</li></ul>
+        </article>
+
+        <article class="card agent-card">
+          <div class="agent-head">
+            <h3 class="agent-name">LONEWOLF GUARD</h3>
+            <div id="guard-indicator" class="indicator offline"><span class="dot"></span><span id="guard-status">OFFLINE</span></div>
+          </div>
+          <p class="sub-value" id="guard-role">Eventi di sicurezza, anomalie e tentativi ripetuti</p>
+          <div class="agent-kv">
+            <p>Livello minaccia · <span id="guard-level" class="threat-tag">--</span></p>
+            <p>Attività corrente · <span id="guard-activity">--</span></p>
+            <p>Ultimo controllo · <span id="guard-lastcheck">--</span></p>
+            <p>Ultimo evento ricevuto · <span id="guard-lastevent">--</span></p>
+            <p>Eventi analizzati · <span id="guard-analyzed">0</span></p>
+            <p>Integrità registro · <span id="guard-integrity">--</span></p>
+          </div>
+          <h4 class="card-title">SORGENTI RIPETUTE E REGOLE VIOLETE</h4>
+          <ul id="guard-findings" class="log"><li class="ok">Nessuna regola violata</li></ul>
+        </article>
+      </div>
+
+      <div>
+        <h4 class="card-title">COMUNICAZIONI CORE <-> GUARD</h4>
+        <ul id="agent-comms" class="log"><li class="ok">Nessuna comunicazione</li></ul>
+      </div>
+    </section>
+
     <section class="card security-center">
       <div class="sec-head">
         <h2 class="card-title">CENTRO DI CONTROLLO · SICUREZZA</h2>
