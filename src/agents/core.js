@@ -2,6 +2,7 @@ const config = require('../config');
 const eventBus = require('../events/eventBus');
 const metrics = require('../metrics/metrics');
 const security = require('../security/security');
+const persist = require('../persist/stateStore');
 const protocol = require('./protocol');
 const guard = require('./guard');
 const { ROLES } = require('./permissions');
@@ -214,4 +215,33 @@ function snapshot() {
   };
 }
 
-module.exports = { start, stop, snapshot, status };
+function collect() {
+  return {
+    containmentRequests: status.containmentRequests,
+    findings: findings.slice(0, 20),
+    hotspotLog: hotspotLog.slice(0, 20)
+  };
+}
+
+function restore(data) {
+  if (!data) return;
+  const restored = Number(data.containmentRequests);
+  if (Number.isFinite(restored) && restored > status.containmentRequests) {
+    status.containmentRequests = Math.floor(restored);
+  }
+  if (Array.isArray(data.hotspotLog) && hotspotLog.length === 0) {
+    for (const entry of data.hotspotLog.slice(0, 20)) {
+      if (entry && typeof entry.ts === 'string' && typeof entry.detail === 'string') hotspotLog.push(entry);
+    }
+  }
+  if (Array.isArray(data.findings) && findings.length === 0) {
+    for (const entry of data.findings.slice(0, 20)) {
+      if (entry && typeof entry.ts === 'string' && typeof entry.rule === 'string') findings.push(entry);
+    }
+  }
+}
+
+persist.registerCollector('core', collect);
+persist.registerValidator('core', (data) => Boolean(data && (Number.isFinite(Number(data.containmentRequests)) || Array.isArray(data.findings) || Array.isArray(data.hotspotLog))));
+
+module.exports = { start, stop, snapshot, status, collect, restore };

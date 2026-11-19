@@ -3,6 +3,7 @@ const config = require('../config');
 const eventBus = require('../events/eventBus');
 const { uptime } = require('../utils/runtime');
 const sseClients = require('../sse/clients');
+const persist = require('../persist/stateStore');
 
 const startedAtMs = Date.parse(config.startedAt);
 
@@ -129,4 +130,45 @@ function stop() {
   }
 }
 
-module.exports = { start, stop, sample, current: current_, trackRequest };
+function collect() {
+  return {
+    totalRequests,
+    statusCodes: [...statusCodes.entries()],
+    routes: [...routes.entries()].map(([key, entry]) => ({ key, ...entry }))
+  };
+}
+
+function restore(data) {
+  if (!data) return;
+  const restoredTotal = Number(data.totalRequests);
+  if (Number.isFinite(restoredTotal) && restoredTotal > totalRequests) totalRequests = Math.floor(restoredTotal);
+  if (Array.isArray(data.statusCodes)) {
+    for (const [code, count] of data.statusCodes) {
+      const c = Number(code);
+      const n = Number(count);
+      if (Number.isInteger(c) && Number.isFinite(n) && n > (statusCodes.get(c) || 0)) statusCodes.set(c, Math.floor(n));
+    }
+  }
+  if (Array.isArray(data.routes)) {
+    for (const row of data.routes) {
+      if (!row || typeof row.key !== 'string') continue;
+      const count = Number(row.count);
+      const totalMs = Number(row.totalMs);
+      const errors = Number(row.errors);
+      if (!Number.isFinite(count) || count <= 0) continue;
+      const existing = routes.get(row.key) || { count: 0, totalMs: 0, errors: 0 };
+      if (count > existing.count) {
+        routes.set(row.key, {
+          count: Math.floor(count),
+          totalMs: Number.isFinite(totalMs) && totalMs > existing.totalMs ? totalMs : existing.totalMs,
+          errors: Number.isFinite(errors) && errors > existing.errors ? Math.floor(errors) : existing.errors
+        });
+      }
+    }
+  }
+}
+
+persist.registerCollector('metrics', collect);
+persist.registerValidator('metrics', (data) => Boolean(data && (Number.isFinite(Number(data.totalRequests)) || Array.isArray(data.routes))));
+
+module.exports = { start, stop, sample, current: current_, trackRequest, collect, restore };

@@ -1,4 +1,5 @@
 const eventBus = require('../events/eventBus');
+const persist = require('../persist/stateStore');
 const protocol = require('./protocol');
 const core = require('./core');
 const guard = require('./guard');
@@ -77,4 +78,13 @@ function snapshot() {
   };
 }
 
-module.exports = { start, stop, snapshot, startPublisher, stopPublisher, pushState };
+function restore(data, verdict) {
+  if (!data) return;
+  guard.restore(data.guard, verdict);
+  core.restore(data.core);
+}
+
+persist.registerCollector('guard', guard.collect);
+persist.registerValidator('guard', (data) => Boolean(data && guard.chainValid(data.registry)));
+
+module.exports = { start, stop, snapshot, restore, startPublisher, stopPublisher, pushState };

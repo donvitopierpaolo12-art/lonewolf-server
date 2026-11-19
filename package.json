@@ -7,7 +7,9 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node tests/integration.test.js",
-    "test:agents": "node tests/agents.test.js"
+    "test:agents": "node tests/agents.test.js",
+    "test:restart": "node tests/restart.test.js",
+    "test:errors": "node tests/errors.test.js"
   },
   "keywords": [
     "express",

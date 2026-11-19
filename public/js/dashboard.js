@@ -75,6 +75,7 @@
   el.portLabel.textContent = window.location.port || '3000';
 
   let lastSeq = 0;
+  let knownBoot = null;
   let eventSource = null;
   let fallbackTimer = null;
 
@@ -289,10 +290,15 @@
 
   function handleEvent(event) {
     if (!event || typeof event.seq !== 'number') return;
+    if (event.boot && knownBoot && event.boot !== knownBoot) lastSeq = 0;
+    if (event.boot) knownBoot = event.boot;
     if (event.seq <= lastSeq) return;
     lastSeq = event.seq;
 
     switch (event.type) {
+      case 'bus_error':
+        pushAlert(`Errore interno bus: ${event.data && event.data.message ? event.data.message : 'sconosciuto'}`);
+        break;
       case 'snapshot':
         applyMetrics(event.data.metrics);
         applySecurity(event.data.security);

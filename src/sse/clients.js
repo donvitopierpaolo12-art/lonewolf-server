@@ -11,5 +11,18 @@ module.exports = {
   },
   count() {
     return clients.size;
+  },
+  closeAll() {
+    const list = [...clients];
+    list.forEach((res) => {
+      try {
+        res.end();
+      } catch (err) {
+        try {
+          res.destroy();
+        } catch (ignored) {}
+      }
+    });
+    return list.length;
   }
 };

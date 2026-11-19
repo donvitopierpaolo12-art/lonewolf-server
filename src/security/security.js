@@ -1,5 +1,6 @@
 const config = require('../config');
 const eventBus = require('../events/eventBus');
+const persist = require('../persist/stateStore');
 
 const counters = {
   blockedRequests: 0,
@@ -244,6 +245,53 @@ function requestContainment(source, requestedBy) {
   return { decision: 'richiesta rifiutata: soglie di sicurezza non raggiunte', enforced: false };
 }
 
+function collect() {
+  return {
+    counters: { ...counters },
+    blocked: Array.from(blocked.entries()).map(([ip, entry]) => ({
+      ip,
+      until: entry.until,
+      reason: entry.reason,
+      at: entry.at
+    })),
+    log: log.slice(0, 100)
+  };
+}
+
+function restore(data) {
+  if (!data) return;
+  if (data.counters && typeof data.counters === 'object') {
+    for (const key of Object.keys(counters)) {
+      const value = Number(data.counters[key]);
+      if (Number.isFinite(value) && value > counters[key]) counters[key] = Math.floor(value);
+    }
+  }
+  if (Array.isArray(data.blocked)) {
+    const now = Date.now();
+    for (const entry of data.blocked) {
+      if (!entry || typeof entry.ip !== 'string' || !Number.isFinite(entry.until)) continue;
+      if (entry.until <= now) continue;
+      const existing = blocked.get(entry.ip);
+      if (!existing || existing.until < entry.until) {
+        blocked.set(entry.ip, {
+          until: entry.until,
+          reason: String(entry.reason || 'blocco ripristinato dallo stato salvato'),
+          at: Number(entry.at) || now
+        });
+      }
+    }
+  }
+  if (Array.isArray(data.log) && log.length === 0) {
+    for (const entry of data.log.slice(0, 100)) {
+      if (entry && typeof entry.type === 'string' && typeof entry.ts === 'string') log.push(entry);
+    }
+  }
+}
+
+function noteSystemEvent(type, detail) {
+  recordEvent(type, 'sistema', detail);
+}
+
 function startCleanup() {
   if (cleanupTimer) return;
   cleanupTimer = setInterval(() => {
@@ -267,4 +315,7 @@ function startCleanup() {
   if (cleanupTimer.unref) cleanupTimer.unref();
 }
 
-module.exports = { guard, noteNotFound, noteInvalidPayload, snapshot, unblock, requestContainment, startCleanup };
+persist.registerCollector('security', collect);
+persist.registerValidator('security', (data) => Boolean(data && (data.counters || data.blocked || Array.isArray(data.log))));
+
+module.exports = { guard, noteNotFound, noteInvalidPayload, snapshot, unblock, requestContainment, startCleanup, collect, restore, noteSystemEvent };

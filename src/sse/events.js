@@ -41,6 +41,7 @@ function handler(req, res) {
 
   const snapshotEvent = {
     seq: eventBus.seq,
+    boot: eventBus.bootId,
     type: 'snapshot',
     ts: new Date().toISOString(),
     data: buildSnapshot()

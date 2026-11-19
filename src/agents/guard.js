@@ -4,6 +4,8 @@ const eventBus = require('../events/eventBus');
 const protocol = require('./protocol');
 const { ROLES } = require('./permissions');
 
+let locked = false;
+
 const LEVELS = ['NORMALE', 'ATTENZIONE', 'ALLERTA', 'CRITICO'];
 
 const status = {
@@ -30,6 +32,10 @@ let unsubscribe = null;
 let digestTimer = null;
 
 function appendLog(type, detail) {
+  if (locked) {
+    status.lockedAppendsRejected = (status.lockedAppendsRejected || 0) + 1;
+    return;
+  }
   const now = Date.now();
   const seq = 1 + (registry[0] ? registry[0].seq : 0);
   const entry = {
@@ -48,10 +54,15 @@ function appendLog(type, detail) {
   if (registry.length > 200) registry.pop();
 }
 
-function verify() {
-  let hash = '0'.repeat(64);
-  for (let i = registry.length - 1; i >= 0; i--) {
-    const entry = registry[i];
+function chainValid(list) {
+  if (!Array.isArray(list)) return false;
+  const oldest = list[list.length - 1];
+  let hash = oldest && typeof oldest.prevHash === 'string' ? oldest.prevHash : '0'.repeat(64);
+  for (let i = list.length - 1; i >= 0; i--) {
+    const entry = list[i];
+    if (!entry || typeof entry.seq !== 'number' || typeof entry.ts !== 'string'
+      || typeof entry.type !== 'string' || typeof entry.detail !== 'string'
+      || typeof entry.prevHash !== 'string' || typeof entry.hash !== 'string') return false;
     const expected = crypto.createHash('sha256')
       .update(`${entry.seq}|${entry.ts}|${entry.type}|${entry.detail}|${entry.prevHash}`)
       .digest('hex');
@@ -59,6 +70,17 @@ function verify() {
     hash = entry.hash;
   }
   return true;
+}
+
+function anchoredOk() {
+  const head = registry[0];
+  const anchor = protocol.currentAnchor();
+  if (!head) return anchor.seq === 0;
+  return head.seq === anchor.seq && head.hash === anchor.hash;
+}
+
+function verify() {
+  return chainValid(registry);
 }
 
 function setActivity(activity) {
@@ -140,9 +162,9 @@ function computeThreatLevel(windowEvents) {
 
 function onIntegrityRequest() {
   setActivity('verifica integrità registro richiesta da CORE');
-  const valid = verify();
+  const valid = verify() && anchoredOk() && !locked;
   status.integrity = valid ? 'verificata' : 'COMPROMESSA';
-  appendLog('integrity_check', valid ? 'catena hash verificata, registro integro' : 'catena hash NON valida');
+  appendLog('integrity_check', valid ? 'catena hash verificata e ancora esterna congruente' : 'registro NON congruente: catena o ancora esterna non valida');
   protocol.send('guard', 'core', 'integrity_result', {
     valid,
     registrySize: registry.length,
@@ -228,4 +250,37 @@ function registryTail(n = 20) {
   return registry.slice(0, n);
 }
 
-module.exports = { start, stop, snapshot, verify, registryTail, appendLog, status };
+function collect() {
+  return {
+    registry: registry.slice(0, 200),
+    threatLevel: status.threatLevel
+  };
+}
+
+function restore(data, verdict) {
+  const entries = data && Array.isArray(data.registry) ? data.registry : null;
+  if (!entries || !chainValid(entries)) {
+    registry.length = 0;
+    prevHash = '0'.repeat(64);
+    if (verdict === 'tamper') {
+      locked = true;
+      status.integrity = 'COMPROMESSA: registro sospetto conservato in sola lettura';
+    } else {
+      locked = false;
+      status.integrity = 'registro non ripristinato';
+    }
+    return false;
+  }
+  registry.splice(0, registry.length, ...entries.map((entry) => ({ ...entry })));
+  const head = registry[0];
+  prevHash = head ? head.hash : '0'.repeat(64);
+  if (head && verdict !== 'tamper') protocol.anchorRegistry(head.seq, head.hash);
+  if (data.threatLevel && LEVELS.includes(data.threatLevel)) status.threatLevel = data.threatLevel;
+  locked = verdict === 'tamper';
+  status.integrity = locked
+    ? 'COMPROMESSA: registro sospetto conservato in sola lettura'
+    : `ripristinata dal disco (${registry.length} voci)`;
+  return true;
+}
+
+module.exports = { start, stop, snapshot, verify, anchoredOk, chainValid, registryTail, appendLog, collect, restore, status };

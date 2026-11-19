@@ -1,3 +1,5 @@
+const path = require('path');
+
 const config = {
   port: Number(process.env.PORT) || 3000,
   host: process.env.HOST || '0.0.0.0',
@@ -21,6 +23,11 @@ const config = {
     cautionThreshold: Number(process.env.GUARD_CAUTION_THRESHOLD) || 5,
     alertThreshold: Number(process.env.GUARD_ALERT_THRESHOLD) || 15,
     digestIntervalMs: Number(process.env.GUARD_DIGEST_MS) || 15000
+  },
+  persist: {
+    dir: process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
+    saveMs: Number(process.env.STATE_SAVE_MS) || 10000,
+    shutdownTimeoutMs: Number(process.env.SHUTDOWN_TIMEOUT_MS) || 5000
   }
 };
 
